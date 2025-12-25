@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Pause, RotateCcw, Flag, Gauge } from "lucide-react";
+import { Play, Pause, RotateCcw, Flag, Gauge, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface Lap {
   id: number;
@@ -8,7 +9,12 @@ interface Lap {
   diff: number;
 }
 
-export function Stopwatch() {
+interface StopwatchProps {
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+}
+
+export function Stopwatch({ isFullscreen, onToggleFullscreen }: StopwatchProps) {
   const [time, setTime] = useState(() => {
     const saved = localStorage.getItem("stopwatch-time");
     return saved ? parseInt(saved, 10) : 0;
@@ -78,84 +84,106 @@ export function Stopwatch() {
   const formatted = formatTime(time);
 
   return (
-    <div className="glass-card-glow p-6 md:p-8 animate-fade-up">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20">
-          <Gauge className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Stopwatch</h2>
-          <p className="text-sm text-muted-foreground">Track your time with precision</p>
+    <div className={cn(
+      "glass-card overflow-hidden animate-fade-up",
+      isFullscreen && "h-full flex flex-col"
+    )}>
+      {/* Gradient Header */}
+      <div className="relative px-6 py-4 bg-gradient-to-r from-accent/20 via-accent/10 to-transparent border-b border-border/50">
+        <div className="absolute inset-0 bg-gradient-to-r from-accent/5 to-transparent" />
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-accent/20 border border-accent/30 shadow-lg shadow-accent/10">
+              <Gauge className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">Stopwatch</h2>
+              <p className="text-sm text-muted-foreground">Track your time with precision</p>
+            </div>
+          </div>
+          {onToggleFullscreen && (
+            <Button variant="ghost" size="icon" onClick={onToggleFullscreen} className="hover:bg-accent/10">
+              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="text-center mb-8">
-        <div className="inline-flex items-baseline gap-1 p-6 rounded-2xl bg-secondary/30 border border-border/50">
-          <span className="timer-digit">{formatted.minutes}</span>
-          <span className="text-3xl md:text-5xl font-mono text-primary/50">:</span>
-          <span className="timer-digit">{formatted.seconds}</span>
-          <span className="text-3xl md:text-5xl font-mono text-primary/50">.</span>
-          <span className="timer-digit text-3xl md:text-4xl opacity-70">{formatted.centiseconds}</span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3 justify-center mb-8">
-        {!isRunning ? (
-          <Button onClick={handleStart} variant="glow" size="lg">
-            <Play className="w-5 h-5" />
-            Start
-          </Button>
-        ) : (
-          <Button onClick={handlePause} variant="warning" size="lg">
-            <Pause className="w-5 h-5" />
-            Pause
-          </Button>
-        )}
-        <Button onClick={handleLap} variant="secondary" size="lg" disabled={!isRunning && time === 0}>
-          <Flag className="w-5 h-5" />
-          Lap
-        </Button>
-        <Button onClick={handleReset} variant="outline" size="lg">
-          <RotateCcw className="w-5 h-5" />
-          Reset
-        </Button>
-      </div>
-
-      {laps.length > 0 && (
-        <div className="border-t border-border pt-6">
-          <h3 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-            <Flag className="w-4 h-4" />
-            Laps ({laps.length})
-          </h3>
-          <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-            {laps.map((lap, index) => {
-              const lapFormatted = formatTime(lap.time);
-              const diffFormatted = formatTime(lap.diff);
-              const lapNumber = laps.length - index;
-
-              return (
-                <div
-                  key={lap.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30 animate-slide-in"
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Lap {lapNumber}
-                  </span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground font-mono">
-                      +{diffFormatted.minutes}:{diffFormatted.seconds}.{diffFormatted.centiseconds}
-                    </span>
-                    <span className="font-mono text-foreground">
-                      {lapFormatted.minutes}:{lapFormatted.seconds}.{lapFormatted.centiseconds}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+      <div className={cn("p-6 md:p-8", isFullscreen && "flex-1 flex flex-col justify-center")}>
+        <div className="text-center mb-8">
+          <div className={cn(
+            "inline-flex items-baseline gap-1 p-6 rounded-2xl bg-secondary/30 border border-border/50 shadow-lg",
+            isFullscreen && "p-10"
+          )}>
+            <span className={cn("timer-digit", isFullscreen && "text-7xl md:text-9xl")}>{formatted.minutes}</span>
+            <span className={cn("text-3xl md:text-5xl font-mono text-primary/50", isFullscreen && "text-5xl md:text-7xl")}>:</span>
+            <span className={cn("timer-digit", isFullscreen && "text-7xl md:text-9xl")}>{formatted.seconds}</span>
+            <span className={cn("text-3xl md:text-5xl font-mono text-primary/50", isFullscreen && "text-5xl md:text-7xl")}>.</span>
+            <span className={cn("timer-digit text-3xl md:text-4xl opacity-70", isFullscreen && "text-5xl md:text-6xl")}>{formatted.centiseconds}</span>
           </div>
         </div>
-      )}
+
+        <div className="flex flex-wrap gap-3 justify-center mb-8">
+          {!isRunning ? (
+            <Button onClick={handleStart} variant="glow" size="lg">
+              <Play className="w-5 h-5" />
+              Start
+            </Button>
+          ) : (
+            <Button onClick={handlePause} variant="warning" size="lg">
+              <Pause className="w-5 h-5" />
+              Pause
+            </Button>
+          )}
+          <Button onClick={handleLap} variant="secondary" size="lg" disabled={!isRunning && time === 0}>
+            <Flag className="w-5 h-5" />
+            Lap
+          </Button>
+          <Button onClick={handleReset} variant="outline" size="lg">
+            <RotateCcw className="w-5 h-5" />
+            Reset
+          </Button>
+        </div>
+
+        {laps.length > 0 && (
+          <div className="border-t border-border pt-6">
+            <h3 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+              <Flag className="w-4 h-4" />
+              Laps ({laps.length})
+            </h3>
+            <div className={cn(
+              "space-y-2 max-h-[200px] overflow-y-auto pr-2",
+              isFullscreen && "max-h-[300px]"
+            )}>
+              {laps.map((lap, index) => {
+                const lapFormatted = formatTime(lap.time);
+                const diffFormatted = formatTime(lap.diff);
+                const lapNumber = laps.length - index;
+
+                return (
+                  <div
+                    key={lap.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border/30 animate-slide-in"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Lap {lapNumber}
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-muted-foreground font-mono">
+                        +{diffFormatted.minutes}:{diffFormatted.seconds}.{diffFormatted.centiseconds}
+                      </span>
+                      <span className="font-mono text-foreground">
+                        {lapFormatted.minutes}:{lapFormatted.seconds}.{lapFormatted.centiseconds}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
