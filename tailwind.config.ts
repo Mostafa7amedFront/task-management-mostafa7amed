@@ -51,6 +51,18 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        priority: {
+          high: "hsl(var(--priority-high))",
+          medium: "hsl(var(--priority-medium))",
+          low: "hsl(var(--priority-low))",
+        },
+        category: {
+          work: "hsl(var(--category-work))",
+          personal: "hsl(var(--category-personal))",
+          shopping: "hsl(var(--category-shopping))",
+          health: "hsl(var(--category-health))",
+          other: "hsl(var(--category-other))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
