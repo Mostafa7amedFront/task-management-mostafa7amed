@@ -42,6 +42,18 @@
 
     --radius: 0.75rem;
 
+    /* Priority colors */
+    --priority-high: 0 72% 55%;
+    --priority-medium: 38 92% 55%;
+    --priority-low: 174 72% 50%;
+
+    /* Category colors */
+    --category-work: 217 91% 60%;
+    --category-personal: 280 70% 60%;
+    --category-shopping: 142 72% 45%;
+    --category-health: 0 72% 55%;
+    --category-other: 215 20% 55%;
+
     /* Custom tokens */
     --glow-primary: 0 0 40px hsl(174 72% 50% / 0.15);
     --glow-success: 0 0 40px hsl(142 72% 45% / 0.15);
