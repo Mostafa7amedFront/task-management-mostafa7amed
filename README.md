@@ -1,62 +1,211 @@
-# Welcome to your Time & Task Manager  project
+# Payments - Settings & Integration Guide
 
-## Project info
+الملف ده بيشرح إعداد وتشغيل نظام الدفع (Payments) + ربط الـ Frontend + Webhooks لكل بوابة.
 
-**URL**: https://task-management-mostafa7amed.vercel.app
+## 1) المفاهيم الأساسية
 
-## How can I edit this code?
+- **Tenant-aware**: مفاتيح الدفع (API/Secret/WebhookSecret) بتتخزن per-tenant في جدول `TenantPaymentGatewayConfig`.
+- **Initiate**: الـ Frontend يبدأ الدفع عن طريق `invoiceId`، والـ Backend ينشئ `Payment` (Pending) ويرجع `RedirectUrl`.
+- **Webhook**: بوابات الدفع بتخبط Webhook endpoint علشان نعمل `PaymentSucceededEvent` / `PaymentFailedEvent` داخل الـ Outbox.
 
-There are several ways of editing your application.
+---
 
-**Use Lovable**
+## 2) Auth + tenant_id
 
-Simply visit the [Time & Task Manager Project](https://task-management-mostafa7amed.vercel.app/) and start prompting.
+### 2.1 Login
 
-Changes made via Time & Task Manager will be committed automatically to this repo.
+- `POST /api/account/login`
+- لازم تستخدم:
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+Authorization: Bearer <ACCESS_TOKEN>
 ```
 
-**Edit a file directly in GitHub**
+### 2.2 tenant_id
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Endpoint `POST /api/payments/initiate` بيقرأ `tenant_id` من الـ JWT claim.
+- لو `tenant_id` مش موجود/مش valid هيرجع 401.
 
-**Use GitHub Codespaces**
+---
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 3) Configure Payment Gateway Keys (Per Tenant)
 
-## What technologies are used for this project?
+### 3.1 Admin Endpoints
 
-This project is built with:
+**Controller**: `TenantPaymentGatewayConfigsController`
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Base route:
+  - `api/admin/tenants/{tenantId:guid}/payment-gateway-configs`
 
+Endpoints:
+- `GET /api/admin/tenants/{tenantId}/payment-gateway-configs`
+- `GET /api/admin/tenants/{tenantId}/payment-gateway-configs/{gateway}`
+- `PUT /api/admin/tenants/{tenantId}/payment-gateway-configs`
+
+> Required policy: `AuthorizationConstants.AcademySuperAdminPolicy`
+
+### 3.2 Upsert Body
+
+`TenantPaymentGatewayConfigUpsertDto`:
+
+```json
+{
+  "gateway": "Stripe",
+  "apiKey": "...optional depending on gateway...",
+  "secretKey": "...",
+  "webhookSecret": "...",
+  "isActive": true
+}
+```
+
+### 3.3 Gateway string values
+
+من الـ code الحالي، المتوفر كـ tenant webhook handlers:
+- `Stripe` (gateway implementation موجودة كـ `IPaymentGateway`)
+- `Tap`
+- `Paymob`
+- `Fawry`
+
+> مهم: لازم نفس الاسم اللي الـ code متوقعه. في handlers:
+- `TapTenantWebhookHandler` -> `Gateway => "Tap"`
+- `PaymobTenantWebhookHandler` -> `Gateway => "Paymob"`
+- `FawryTenantWebhookHandler` -> `Gateway => "Fawry"`
+
+---
+
+## 4) Initiate Payment (Frontend)
+
+**Controller**: `PaymentsController`
+
+### 4.1 Initiate
+
+- `POST /api/payments/initiate`
+- Auth: Required
+- Permission: `PaymentsCreate`
+
+Body: `InitiatePaymentDto` (مختصر)
+
+```json
+{
+  "invoiceId": "GUID",
+  "method": "Card"
+}
+```
+
+Response: `InitiatePaymentResultDto` (مختصر)
+- `paymentId`
+- `invoiceId`
+- `amount`
+- `gateway`
+- `gatewayReference`
+- `redirectUrl`
+- `referenceNumber`
+
+### 4.2 Redirect
+
+الـ Frontend يعمل redirect مباشرة إلى `redirectUrl` (Stripe Checkout URL).
+
+> في `PaymentService.InitiateCheckoutAsync` الـ gateway الحالية **مقفولة على Stripe** (بتدور على `IPaymentGateway` اسمه "Stripe").
+
+---
+
+## 5) Stripe Settings
+
+### 5.1 Stripe Checkout URLs
+
+StripePaymentGateway بيستخدم `StripeOptions` اللي جاية من config:
+- `Stripe:SuccessUrl` فيها token `{PAYMENT_ID}`
+- `Stripe:CancelUrl` فيها token `{PAYMENT_ID}`
+
+مثال في `appsettings.json`:
+- `Stripe:SuccessUrl = https://YOUR-FRONTEND/success?paymentId={PAYMENT_ID}`
+- `Stripe:CancelUrl  = https://YOUR-FRONTEND/cancel?paymentId={PAYMENT_ID}`
+
+### 5.2 Stripe Secret Key (per-tenant)
+
+- StripePaymentGateway بياخد `SecretKey` من `TenantPaymentGatewayConfig` للـ tenant.
+- الـ `Stripe:SecretKey` في `appsettings.json` مش اللي بيتستخدم فعليًا في تنفيذ checkout (الـ code بيستخدم per-tenant secret).
+
+---
+
+## 6) Webhooks (Production Required)
+
+عندك مسارين للـ webhooks:
+
+### 6.1 Tenant-Aware Webhooks (Recommended)
+
+**Controller**: `TenantPaymentWebhookController`
+
+- `POST /api/webhooks/payments/{gateway}/{tenantId:guid}`
+- `AllowAnonymous`
+
+هنا الـ code بيعمل:
+- Load tenant active config for gateway
+- Verify signature (حسب gateway)
+- Resolve `paymentId` من payload
+- Write outbox event (`PaymentSucceededEvent` أو `PaymentFailedEvent`)
+
+#### Tap
+- signature: header `hashstring`
+- secret: `cfg.SecretKey` أو fallback `cfg.ApiKey`
+
+#### Paymob
+- signature: query param `hmac` (مقروء كـ `query:hmac`)
+- secret: `cfg.WebhookSecret` أو `cfg.SecretKey` أو `cfg.ApiKey`
+
+#### Fawry
+- signature: field `messageSignature` داخل body
+- secureKey: `cfg.WebhookSecret` أو `cfg.SecretKey` أو `cfg.ApiKey`
+
+### 6.2 Stripe Dedicated Webhook
+
+**Controller**: `StripeWebhookController`
+
+- `POST /api/webhooks/stripe/{tenantId:guid}`
+- Header required:
+  - `Stripe-Signature`
+
+StripeWebhookService:
+- بيستخدم per-tenant `WebhookSecret`
+- Idempotency: بيمنع تكرار نفس event id عن طريق `_webhookEventRepo`
+- بيركّز على:
+  - `checkout.session.completed` -> outbox `PaymentSucceededEvent`
+  - `checkout.session.async_payment_failed` / `payment_intent.payment_failed` -> outbox `PaymentFailedEvent`
+
+---
+
+## 7) Testing Checklist
+
+### 7.1 Setup
+
+1) اعمل Tenant
+2) من admin account، upsert config للـ gateway:
+   - Stripe: `SecretKey` + `WebhookSecret` + `IsActive=true`
+3) اعمل invoice للـ tenant
+
+### 7.2 Initiate from Frontend / Postman
+
+- Call `POST /api/payments/initiate`
+- خد `redirectUrl`
+- افتحها في المتصفح واعمل test payment (Stripe test card)
+
+### 7.3 Webhook Local Testing
+
+لو هتجرب Webhooks محلي:
+- استخدم Stripe CLI أو ngrok
+- سجل webhook URL على Stripe dashboard:
+  - `https://<public-url>/api/webhooks/stripe/{tenantId}`
+
+### 7.4 Verify Results
+
+- راقب جدول `Payments`:
+  - status يتحول Paid/Failed بعد معالجة outbox/event
+- راقب outbox/events لو عندك background publisher
+
+---
+
+## 8) Security Notes
+
+- **ممنوع** وضع أي `secretKey/webhookSecret` في الـ Frontend.
+- انقل القيم الحساسة إلى environment variables في production.
+- webhooks لازم تكون `AllowAnonymous` (TenantPaymentWebhookController عامل كده). Controller تاني اسمه `PaymentWebhookController` عليه `[Authorize]` ومش مناسب للـ providers.
